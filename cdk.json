@@ -1,0 +1,14 @@
+{
+    "app": "python3 app.py",
+    "context": {
+        "environment": {
+            "AWS_REGION": "us-east-1",
+            "S3_BUCKET": "simple-lakehouse-bucket",
+            "GLUE_DATABASE": "simple-database",
+            "GLUE_TABLE": "simple-csv-table",
+            "CREATE_GLUE_TABLE_PARTITION_LAMBDA": "create-glue-table-partition-lambda",
+            "YEAR": "2024",
+            "MONTH": "04"
+        }
+    }
+}
