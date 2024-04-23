@@ -4,6 +4,7 @@ from aws_cdk import (
     aws_iam as iam,
     aws_lambda as _lambda,
     aws_s3 as s3,
+    aws_s3_deployment as s3_deploy,
     triggers,
 )
 
@@ -32,7 +33,7 @@ class SimpleLakehouseStack(Stack):
         self.csv_table = glue.S3Table(
             self,
             "CsvTable",
-            table_name=environment["GLUE_TABLE"],
+            table_name=environment["GLUE_CSV_TABLE"],
             bucket=self.s3_bucket,
             # s3_prefix="year=2024/month=04/",  ### put this back in
             database=self.simple_database,
@@ -53,7 +54,8 @@ class SimpleLakehouseStack(Stack):
             # partition_indexes=None, compressed=None, description=None,
         )
 
-        self.create_glue_table_partition_lambda = _lambda.Function(  # will be used once in Trigger defined below
+        # will be used once in Trigger defined below
+        self.create_glue_table_partition_lambda = _lambda.Function(
             self,
             "CreateGlueTablePartitionLambda",
             function_name=environment["CREATE_GLUE_TABLE_PARTITION_LAMBDA"],
@@ -65,7 +67,7 @@ class SimpleLakehouseStack(Stack):
             handler="handler.lambda_handler",
             environment={
                 "GLUE_DATABASE": environment["GLUE_DATABASE"],
-                "GLUE_TABLE": environment["GLUE_TABLE"],
+                "GLUE_CSV_TABLE": environment["GLUE_CSV_TABLE"],
                 "YEAR": environment["YEAR"],
                 "MONTH": environment["MONTH"],
             },
@@ -79,6 +81,18 @@ class SimpleLakehouseStack(Stack):
                     self.csv_table.table_arn,
                 ],
             )
+        )
+
+
+        # connect AWS resources together
+        self.upload_s3_files = s3_deploy.BucketDeployment(  # upload dags to S3
+            self,
+            "UploadS3Files",
+            destination_bucket=self.s3_bucket,
+            destination_key_prefix=f"year={environment['YEAR']}/month={environment['MONTH']}/",
+            sources=[s3_deploy.Source.asset("./data")],  # hard coded
+            prune=True,  ### it seems that delete Lambda uses a different IAM role
+            retain_on_delete=False,
         )
         self.trigger_create_glue_table_partition_lambda = triggers.Trigger(
             self,

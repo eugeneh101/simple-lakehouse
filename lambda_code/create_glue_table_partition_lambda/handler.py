@@ -4,7 +4,7 @@ import boto3
 
 
 GLUE_DATABASE = os.environ["GLUE_DATABASE"]
-GLUE_TABLE = os.environ["GLUE_TABLE"]
+GLUE_CSV_TABLE = os.environ["GLUE_CSV_TABLE"]
 YEAR = os.environ["YEAR"]
 MONTH = os.environ["MONTH"]
 
@@ -15,7 +15,7 @@ def lambda_handler(event, context) -> None:
     table_definition = GLUE_CLIENT.get_table(
         # CatalogId='string',
         DatabaseName=GLUE_DATABASE,
-        Name=GLUE_TABLE,
+        Name=GLUE_CSV_TABLE,
     )
     storage_descriptor = table_definition["Table"]["StorageDescriptor"]
     storage_descriptor["Location"] += f"year={YEAR}/month={MONTH}/"
@@ -24,8 +24,8 @@ def lambda_handler(event, context) -> None:
     response = GLUE_CLIENT.batch_create_partition(
         # CatalogId='string',
         DatabaseName=GLUE_DATABASE,
-        TableName=GLUE_TABLE,
+        TableName=GLUE_CSV_TABLE,
         PartitionInputList=[parition_input],
     )
     assert not response["Errors"]
-    print("response", response)
+    print("response:", response)
