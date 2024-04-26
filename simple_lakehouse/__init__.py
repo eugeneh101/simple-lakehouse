@@ -7,7 +7,6 @@ from aws_cdk import (
     aws_s3_deployment as s3_deploy,
     triggers,
 )
-
 from aws_cdk import aws_glue_alpha as glue
 from constructs import Construct
 
@@ -35,23 +34,39 @@ class SimpleLakehouseStack(Stack):
             "CsvTable",
             table_name=environment["GLUE_CSV_TABLE"],
             bucket=self.s3_bucket,
-            # s3_prefix="year=2024/month=04/",  ### put this back in
+            # s3_prefix=environment["S3_CSV_FOLDER"],
             database=self.simple_database,
             partition_keys=[  # data not in S3 file but in the Glue table as last columns
                 glue.Column(name="year", type=glue.Schema.STRING),
                 glue.Column(name="month", type=glue.Schema.STRING),
             ],
             columns=[  # need column order to be retained; data does not have header
-                glue.Column(name="id", type=glue.Schema.SMALL_INT),
+                glue.Column(
+                    name="id", type=glue.Schema.BIG_INT
+                ),  # automatically truncates float to int
                 glue.Column(name="first_name", type=glue.Schema.STRING),
-                glue.Column(name="last_name", type=glue.Schema.STRING),
-                glue.Column(name="age", type=glue.Schema.SMALL_INT),
                 glue.Column(name="email", type=glue.Schema.STRING),
-                glue.Column(name="ip_address", type=glue.Schema.STRING),
+                glue.Column(name="age", type=glue.Schema.SMALL_INT),
+                glue.Column(name="height", type=glue.Schema.STRING),
+                glue.Column(name="married", type=glue.Schema.BOOLEAN),
+                glue.Column(name="registration_date", type=glue.Schema.DATE),
+                glue.Column(name="purchase_time", type=glue.Schema.TIMESTAMP),
             ],
             data_format=glue.DataFormat.CSV,
             enable_partition_filtering=True,
+            # parameters={},  # shows up in table properties, not serde parameters
             # partition_indexes=None, compressed=None, description=None,
+        )
+        self.csv_table.node.default_child.add_property_override(  # CDK raw override
+            "TableInput.StorageDescriptor.SerdeInfo",
+            {  # this serializer can handle missing values which it replaces with NULLs
+                "SerializationLibrary": "org.apache.hadoop.hive.serde2.lazy.LazySimpleSerDe",
+                "Parameters": {
+                    "field.delim": ",",  # "separatorChar": ",",
+                    "skip.header.line.count": "1",
+                    # "serialization.format": 1,  # have no idea what this does
+                },
+            },
         )
 
         # will be used once in Trigger defined below
@@ -66,6 +81,7 @@ class SimpleLakehouseStack(Stack):
             ),
             handler="handler.lambda_handler",
             environment={
+                "S3_CSV_FOLDER": environment["S3_CSV_FOLDER"],
                 "GLUE_DATABASE": environment["GLUE_DATABASE"],
                 "GLUE_CSV_TABLE": environment["GLUE_CSV_TABLE"],
                 "YEAR": environment["YEAR"],
@@ -83,19 +99,21 @@ class SimpleLakehouseStack(Stack):
             )
         )
 
-
         # connect AWS resources together
-        self.upload_s3_files = s3_deploy.BucketDeployment(  # upload dags to S3
+        self.upload_csv_files_to_s3 = s3_deploy.BucketDeployment(  # upload dags to S3
             self,
-            "UploadS3Files",
+            "UploadCsvFilesToS3",
             destination_bucket=self.s3_bucket,
-            destination_key_prefix=f"year={environment['YEAR']}/month={environment['MONTH']}/",
+            destination_key_prefix=(
+                f"{environment['S3_CSV_FOLDER']}/"
+                f"year={environment['YEAR']}/month={environment['MONTH']}/"
+            ),
             sources=[s3_deploy.Source.asset("./data")],  # hard coded
             prune=True,  ### it seems that delete Lambda uses a different IAM role
             retain_on_delete=False,
         )
         self.trigger_create_glue_table_partition_lambda = triggers.Trigger(
-            self,
+            self,  # might be possible to replace Trigger with CustomResource
             "TriggerCreateGlueTablePartitionLambda",
             handler=self.create_glue_table_partition_lambda,  # this is underlying Lambda
             timeout=self.create_glue_table_partition_lambda.timeout,

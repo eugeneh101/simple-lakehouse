@@ -4,6 +4,7 @@
         "environment": {
             "AWS_REGION": "us-east-1",
             "S3_BUCKET": "simple-lakehouse-bucket",
+            "S3_CSV_FOLDER": "csv_data",
             "GLUE_DATABASE": "simple-database",
             "GLUE_CSV_TABLE": "simple-csv-table",
             "CREATE_GLUE_TABLE_PARTITION_LAMBDA": "create-glue-table-partition-lambda",
