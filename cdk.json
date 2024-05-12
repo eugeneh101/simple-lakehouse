@@ -5,8 +5,10 @@
             "AWS_REGION": "us-east-1",
             "S3_BUCKET": "simple-lakehouse-bucket",
             "S3_CSV_FOLDER": "csv_data",
+            "S3_PARQUET_FOLDER": "parquet_data",
             "GLUE_DATABASE": "simple-database",
             "GLUE_CSV_TABLE": "simple-csv-table",
+            "GLUE_PARQUET_TABLE": "simple-parquet-table",
             "CREATE_GLUE_TABLE_PARTITION_LAMBDA": "create-glue-table-partition-lambda",
             "YEAR": "2024",
             "MONTH": "04"

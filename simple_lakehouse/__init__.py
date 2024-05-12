@@ -34,7 +34,7 @@ class SimpleLakehouseStack(Stack):
             "CsvTable",
             table_name=environment["GLUE_CSV_TABLE"],
             bucket=self.s3_bucket,
-            # s3_prefix=environment["S3_CSV_FOLDER"],
+            s3_prefix=f"{environment['S3_CSV_FOLDER']}/",
             database=self.simple_database,
             partition_keys=[  # data not in S3 file but in the Glue table as last columns
                 glue.Column(name="year", type=glue.Schema.STRING),
@@ -47,7 +47,7 @@ class SimpleLakehouseStack(Stack):
                 glue.Column(name="first_name", type=glue.Schema.STRING),
                 glue.Column(name="email", type=glue.Schema.STRING),
                 glue.Column(name="age", type=glue.Schema.SMALL_INT),
-                glue.Column(name="height", type=glue.Schema.STRING),
+                glue.Column(name="height", type=glue.Schema.FLOAT),
                 glue.Column(name="married", type=glue.Schema.BOOLEAN),
                 glue.Column(name="registration_date", type=glue.Schema.DATE),
                 glue.Column(name="purchase_time", type=glue.Schema.TIMESTAMP),
@@ -69,6 +69,35 @@ class SimpleLakehouseStack(Stack):
             },
         )
 
+        self.parquet_table = glue.S3Table(
+            self,
+            "ParquetTable",
+            table_name=environment["GLUE_PARQUET_TABLE"],
+            bucket=self.s3_bucket,
+            s3_prefix=f"{environment['S3_PARQUET_FOLDER']}/",
+            database=self.simple_database,
+            partition_keys=[  # data not in S3 file but in the Glue table as last columns
+                glue.Column(name="year", type=glue.Schema.STRING),
+                glue.Column(name="month", type=glue.Schema.STRING),
+            ],
+            columns=[
+                glue.Column(name="id", type=glue.Schema.BIG_INT),
+                glue.Column(name="first_name", type=glue.Schema.STRING),
+                glue.Column(name="email", type=glue.Schema.STRING),
+                glue.Column(name="age", type=glue.Schema.SMALL_INT),
+                glue.Column(name="height", type=glue.Schema.DOUBLE),
+                glue.Column(name="married", type=glue.Schema.BOOLEAN),
+                # cast before saving to parquet: df["registration_date"] = pd.to_datetime(df["registration_date"]).dt.date
+                glue.Column(name="registration_date", type=glue.Schema.DATE),
+                # cast before saving to parquet: df["purchase_time"] = pd.to_datetime(df["purchase_time"])
+                glue.Column(name="purchase_time", type=glue.Schema.TIMESTAMP),
+            ],
+            data_format=glue.DataFormat.PARQUET,
+            enable_partition_filtering=True,
+            # parameters={},  # shows up in table properties, not serde parameters
+            # partition_indexes=None, compressed=None, description=None,
+        )
+
         # will be used once in Trigger defined below
         self.create_glue_table_partition_lambda = _lambda.Function(
             self,
@@ -81,9 +110,9 @@ class SimpleLakehouseStack(Stack):
             ),
             handler="handler.lambda_handler",
             environment={
-                "S3_CSV_FOLDER": environment["S3_CSV_FOLDER"],
                 "GLUE_DATABASE": environment["GLUE_DATABASE"],
                 "GLUE_CSV_TABLE": environment["GLUE_CSV_TABLE"],
+                "GLUE_PARQUET_TABLE": environment["GLUE_PARQUET_TABLE"],
                 "YEAR": environment["YEAR"],
                 "MONTH": environment["MONTH"],
             },
@@ -95,6 +124,7 @@ class SimpleLakehouseStack(Stack):
                     f"arn:aws:glue:{environment['AWS_REGION']}:{self.account}:catalog",
                     self.simple_database.database_arn,
                     self.csv_table.table_arn,
+                    self.parquet_table.table_arn,
                 ],
             )
         )
@@ -108,9 +138,27 @@ class SimpleLakehouseStack(Stack):
                 f"{environment['S3_CSV_FOLDER']}/"
                 f"year={environment['YEAR']}/month={environment['MONTH']}/"
             ),
-            sources=[s3_deploy.Source.asset("./data")],  # hard coded
+            sources=[
+                s3_deploy.Source.asset(f"./data/{environment['S3_CSV_FOLDER']}")
+            ],  # hard coded pattern
             prune=True,  ### it seems that delete Lambda uses a different IAM role
             retain_on_delete=False,
+        )
+        self.upload_parquet_files_to_s3 = (
+            s3_deploy.BucketDeployment(  # upload dags to S3
+                self,
+                "UploadParquetFilesToS3",
+                destination_bucket=self.s3_bucket,
+                destination_key_prefix=(
+                    f"{environment['S3_PARQUET_FOLDER']}/"
+                    f"year={environment['YEAR']}/month={environment['MONTH']}/"
+                ),
+                sources=[
+                    s3_deploy.Source.asset(f"./data/{environment['S3_PARQUET_FOLDER']}")
+                ],  # hard coded pattern
+                prune=True,  ### it seems that delete Lambda uses a different IAM role
+                retain_on_delete=False,
+            )
         )
         self.trigger_create_glue_table_partition_lambda = triggers.Trigger(
             self,  # might be possible to replace Trigger with CustomResource
@@ -121,3 +169,9 @@ class SimpleLakehouseStack(Stack):
             execute_after=[self.csv_table],
             execute_before=[],
         )
+
+
+### TODOs:
+# figure out snappy compression
+# see if BucketDeployment can upload into S3 as folders
+# add parquet with NULLs
