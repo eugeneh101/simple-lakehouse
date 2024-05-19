@@ -81,10 +81,12 @@ class SimpleLakehouseStack(Stack):
                 glue.Column(name="month", type=glue.Schema.STRING),
             ],
             columns=[
-                glue.Column(name="id", type=glue.Schema.BIG_INT),
+                # cast to double due to NULL can't be in int column in pandas
+                glue.Column(name="id", type=glue.Schema.DOUBLE),
                 glue.Column(name="first_name", type=glue.Schema.STRING),
                 glue.Column(name="email", type=glue.Schema.STRING),
-                glue.Column(name="age", type=glue.Schema.SMALL_INT),
+                # cast to double due to NULL can't be in int column in pandas
+                glue.Column(name="age", type=glue.Schema.DOUBLE),
                 glue.Column(name="height", type=glue.Schema.DOUBLE),
                 glue.Column(name="married", type=glue.Schema.BOOLEAN),
                 # cast before saving to parquet: df["registration_date"] = pd.to_datetime(df["registration_date"]).dt.date
@@ -172,6 +174,5 @@ class SimpleLakehouseStack(Stack):
 
 
 ### TODOs:
-# figure out snappy compression
-# see if BucketDeployment can upload into S3 as folders
-# add parquet with NULLs
+# use snappy compression when serialize to parquet: DONE
+# see if BucketDeployment can upload into S3 as folders: yes it can!
